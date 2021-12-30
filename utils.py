@@ -42,7 +42,7 @@ def show_data(X, y, predicted=None, s=30, block=True):
         
         plt.subplot(2,1,1)
         plt.title('Original')
-    y = np.asarray(predicted).flatten()
+    y = np.asarray(y).flatten()
     plt.scatter(X[:, 0], X[:, 1],
                 c=y, cmap='coolwarm',
                 s=10 + s * np.maximum(0, y))
