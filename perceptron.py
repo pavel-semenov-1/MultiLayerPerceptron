@@ -7,9 +7,9 @@ from utils import *
 
 class MultiLayerPerceptron:
 
-    def compute_accuracy(self, inputs, targets):
+    def compute_accuracy(self, inputs, targets, epsilon = 0.1):
         # Computes *classification* accuracy - percentage of correctly categorized inputs
-        return np.mean([d.argmax() == self.compute_output(self.add_bias(x)).argmax() for (x, d) in zip(inputs, targets)])
+        return np.mean([d - self.compute_output(self.add_bias(x)) < epsilon for (x, d) in zip(inputs, targets)])
 
     def add_bias(self, x):
         # Add bias to input vector x.
@@ -27,9 +27,17 @@ class MultiLayerPerceptron:
     def sigmoid_der(self, x):
         return self.sigmoid(x)*(1-self.sigmoid(x))
 
-    def compute_error(self, d, y):
-        # Computes square error of output y against desired output d.
-        return sum([(d[i] - y[i])**2 for i in range(self.output_dim)])
+    def linear(self, x):
+        return x
+
+    def linear_der(self, x):
+        return 1
+
+    def relu(self, x):
+        return max(0, x)
+
+    def relu_der(self, x):
+        return 0 if x < 0 else 1
 
     def load_data(self, file):
         data = np.loadtxt(file)
@@ -38,8 +46,8 @@ class MultiLayerPerceptron:
         return data[:train_count], data[train_count:]
 
     def compute_output(self, x):
-        f_out = self.sigmoid
-        f_hid = self.sigmoid
+        f_out = self.linear
+        f_hid = self.relu
         net_hid = [sum([self.W_hid[i][j]*x[j] for j in range(self.input_dim+1)]) for i in range(self.hidden_dim)]
         h = [f_hid(net_hid[i]) for i in range(self.hidden_dim)]
         net_out = sum([self.W_out[i]*h[i] for i in range(self.hidden_dim)])
@@ -47,13 +55,18 @@ class MultiLayerPerceptron:
 
     def train(self, inputs, targets, num_epochs=100, alpha=0.1):
         count = inputs.shape[0]
-        f_out = self.sigmoid
-        f_hid = self.sigmoid
-        f_out_der = self.sigmoid_der
-        f_hid_der = self.sigmoid_der
+        f_out = self.linear
+        f_hid = self.relu
+        f_out_der = self.linear_der
+        f_hid_der = self.relu_der
+        # Momentum
+        momentum = 0.8
+        delta_out = 0.0
+        delta_hid = np.zeros(self.hidden_dim)
+        # Learning rate schedule
+        decay = alpha/num_epochs
 
         for ep in range(num_epochs):
-            E = 0
             for index in np.random.permutation(count):
                 x = self.add_bias(inputs[index])
                 d = targets[index]
@@ -61,16 +74,18 @@ class MultiLayerPerceptron:
                 h = [f_hid(net_hid[i]) for i in range(self.hidden_dim)]
                 net_out = sum([self.W_out[i]*h[i] for i in range(self.hidden_dim)])
                 y = f_out(net_out)
-                e = self.compute_error(d, y)
-                E += e
+                old_delta_out = delta_out
+                old_delta_hid = delta_hid
                 delta_out = (d-y)*f_out_der(net_out)
                 delta_hid = [self.W_out[i]*delta_out*f_hid_der(net_hid[i]) for i in range(self.hidden_dim)]
                 for i in range(self.output_dim):
                     self.W_out[i] = self.W_out[i] + alpha*delta_out*h[i]
                 for i in range(self.hidden_dim):
-                    self.W_hid[i] = self.W_hid[i] + alpha*delta_hid[i]*x
+                    self.W_hid[i] = self.W_hid[i]+ alpha*delta_hid[i]*x 
+            # Learning rate schedule
+            alpha = alpha * 1/(1 + decay * ep)
             if (ep+1)%10 == 0:
-                print('epoch ' + str(ep+1) + ' accuracy ' + str(self.compute_accuracy(inputs, targets)))
+                print('epoch ' + str(ep+1))
 
     def validate(self, data):
         inputs, targets = data[:,:2], data[:,2:]
@@ -79,12 +94,13 @@ class MultiLayerPerceptron:
             x = self.add_bias(inputs[i])
             y = self.compute_output(x)
             predicted.append(y)
+        print('Accuracy: {:4.1%}'.format(self.compute_accuracy(inputs, targets)))
         show_data(inputs, targets, predicted=predicted)
         
-    def evaluate(self, file):
+    def evaluate(self, file, hidden_dim=5):
         train_data, validate_data = self.load_data(file)
         inputs, targets = train_data[:,:2], train_data[:,2:]
-        self.input_dim, self.output_dim, self.hidden_dim =  inputs.shape[1], targets.shape[1], inputs.shape[1]
+        self.input_dim, self.output_dim, self.hidden_dim =  inputs.shape[1], targets.shape[1], hidden_dim
         self.initialize_weights()
         self.train(inputs, targets)
         self.validate(validate_data)
